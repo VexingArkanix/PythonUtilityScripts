@@ -2,6 +2,7 @@ from os import listdir, walk, remove, chmod
 from os.path import isfile, join
 from shutil import copy2
 import stat, os
+import cPickle as pickle
 
 def listdir_nohiddenfiles(path):
     """
@@ -10,6 +11,18 @@ def listdir_nohiddenfiles(path):
     for file in listdir(path):
         if not file.startswith('.'):
             yield file
+
+def get_file_list_from_dict_file(filename):
+    """
+    To speed file path search, retrieve previous searches from dictionary file.
+    """
+    previousSearchDictionary = {}
+    try:
+        with open(filename,'rb') as fp:
+            previousSearchDictionary = pickle.load(fp)
+    except IOError, e:
+        print "Failed to find previous file search backup. %s" % e
+    return previousSearchDictionary
 
 def list_files(filepath):
     """
@@ -44,20 +57,37 @@ def copy_one_file(sourcepathfile, destinationpath):
 
 destpath = '/destpath'
 backuppath = '/backuppath'
+previoussearchfilename = 'prevsearches'
+
+print 'Retrieving Previous Directory Search Results:'
+prevFoundFiles = get_file_list_from_dict_file(backuppath+'/'+previoussearchfilename)
 
 print 'Files to Copy:'
 filesToCopy = list_files(backuppath)
 print '   from:'+backuppath
 
+if previoussearchfilename in filesToCopy:
+    filesToCopy.remove(previoussearchfilename)
+    print 'Removed ' + previoussearchfilename + ' From File Recovery List.'
+    
+
 print 'Found Files in Destination to Restore:'
 filesToRestore = {}
 for file in filesToCopy:
-    targetFilesToRestore = find_all(file, destpath)
-    print str(len(targetFilesToRestore)) + ' Files Found'
-    if len(targetFilesToRestore) > 1:
-        print 'WARNING: Multiple files found; using the first file'
-    if len(targetFilesToRestore) > 0:
-        filesToRestore[file] = targetFilesToRestore.pop(0)
+    #first search the previous searches backup
+    if file in prevFoundFiles:
+        filesToRestore[file] = prevFoundFiles[file]
+        print 'Found file from previous search: '
+        print '   '+ file + ' in: ' + prevFoundFiles[file]
+    #then search through the directories
+    else:
+        #this code should never execute since the search results are cached
+        targetFilesToRestore = find_all(file, destpath)
+        print str(len(targetFilesToRestore)) + ' Files Found'
+        if len(targetFilesToRestore) > 1:
+            print 'WARNING: Multiple files found; using the first file'
+        if len(targetFilesToRestore) > 0:
+            filesToRestore[file] = targetFilesToRestore.pop(0)
 
 print 'Removing Files from Destination:'
 for file in filesToRestore:
